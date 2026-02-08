@@ -1,17 +1,20 @@
 ﻿using System.Diagnostics;
 using UnityLogMinifier;
 
-if (args.Length == 0)
-{
-	Console.WriteLine("No argument was provided. Provide a path to a .log file to run (drag a file onto the executable).");
-	Console.WriteLine("Press any key to exit.");
-	Console.ReadKey();
-	return -1;
-}
+const string dontOpenArg = "--dont-open-file";
+
+var openFiles = true;
 
 // Validate arguments.
+List<string> files = [];
 foreach (string arg in args)
 {
+	if (arg.Equals(dontOpenArg, StringComparison.OrdinalIgnoreCase))
+	{
+		openFiles = false;
+		continue;
+	}
+	
 	string filePath = arg.Trim('\"');
 
 	if (!File.Exists(filePath))
@@ -29,12 +32,20 @@ foreach (string arg in args)
 		Console.ReadKey();
 		return -1;
 	}
+	
+	files.Add(filePath);
 }
 
-foreach (string arg in args)
+if (files.Count == 0)
 {
-	string filePath = arg.Trim('\"');
+	Console.WriteLine("No files were provided. Provide a path to a .log file to run (drag a file onto the executable).");
+	Console.WriteLine("Press any key to exit.");
+	Console.ReadKey();
+	return -1;
+}
 
+foreach (string filePath in files)
+{
 	string outputPath = Path.Combine(Path.GetDirectoryName(filePath)!, $"{Path.GetFileNameWithoutExtension(filePath)}_minified.log");
 
 	using (var fileStream = File.Open(outputPath, FileMode.Create, FileAccess.Write))
@@ -173,17 +184,20 @@ foreach (string arg in args)
 	Console.WriteLine("Successfully minified log.");
 	Console.WriteLine($"Output file path: {outputPath}");
 
-	try
+	if (openFiles)
 	{
-		Process.Start("explorer", $"\"{outputPath}\"");
-	}
-	catch (Exception e)
-	{
+		try
+		{
+			Process.Start("explorer", $"\"{outputPath}\"");
+		}
+		catch (Exception e)
+		{
 #if DEBUG
-		Console.WriteLine(e);
+			Console.WriteLine(e);
 #endif
-		Console.WriteLine("Could not open file, press any key to continue.");
-		Console.ReadKey();
+			Console.WriteLine("Could not open file, press any key to continue.");
+			Console.ReadKey();
+		}
 	}
 }
 

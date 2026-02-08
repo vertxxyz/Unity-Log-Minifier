@@ -5,8 +5,13 @@ Console app that shortens `.log` files by collapsing repeats.
 - .NET 10.
 
 ## Usage
-1. Drag `*.log` files onto the executable.
+1. Drag `*.log` files onto the executable or pass them as arguments.
 1. Files are output to `*_minified.log` and opened.
+
+| Argument           | Description                     |
+|--------------------|---------------------------------|
+| `--dont-open-file` | Don't open files after running. |
+
 
 ## Capabilities
 ### Collapses and annotates the following
