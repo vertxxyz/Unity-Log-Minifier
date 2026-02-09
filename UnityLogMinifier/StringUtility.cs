@@ -54,10 +54,62 @@ public static class StringUtility
 			return remaining.Length > 0;
 		} while (true);
 	}
+	
+	public static void SplitAndWrite(TextWriter textWriter, ReadOnlySpan<char> text)
+	{
+		// Iterate singular lines and compare for repeats.
+		ReadOnlySpan<char> lastLine = default;
+		var occurenceOfLast = 1;
+		var lineCount = 0;
+		foreach (ReadOnlySpan<char> line in text.EnumerateLines())
+		{
+			// If we have two lines to compare.
+			if (lineCount > 0)
+			{
+				if (line.SequenceEqual(lastLine))
+				{
+					// Match found with the current line.
+					occurenceOfLast++;
+				}
+				else if (occurenceOfLast > 1)
+				{
+					// No match found but the last line was repeated.
+					textWriter.WriteLine(lastLine);
+					textWriter.Write('\t');
+					textWriter.Write("⤷ Repeated ");
+					textWriter.Write(occurenceOfLast);
+					textWriter.WriteLine(" times.");
+					occurenceOfLast = 1;
+				}
+				else
+				{
+					// No match found, and no repetitions.
+					textWriter.WriteLine(lastLine);
+					occurenceOfLast = 1;
+				}
+			}
+
+			lastLine = line;
+			lineCount++;
+		}
+
+		// Write the remaining line/repeats.
+		if (lineCount > 0)
+		{
+			textWriter.WriteLine(lastLine);
+			if (occurenceOfLast > 1)
+			{
+				textWriter.Write('\t');
+				textWriter.Write("⤷ last line repeated ");
+				textWriter.Write(occurenceOfLast);
+				textWriter.WriteLine(" times.");
+			}
+		}
+	}
 
 	extension(ReadOnlySpan<char> span)
 	{
-		private ReadOnlySpan<char> TrimEndNewlines() => span.TrimEnd("\r\n");
-		private ReadOnlySpan<char> TrimStartNewlines() => span.TrimStart("\r\n");
+		public ReadOnlySpan<char> TrimEndNewlines() => span.TrimEnd("\r\n");
+		public ReadOnlySpan<char> TrimStartNewlines() => span.TrimStart("\r\n");
 	}
 }

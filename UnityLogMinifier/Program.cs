@@ -2,8 +2,11 @@
 using UnityLogMinifier;
 
 const string dontOpenArg = "--dont-open-file";
+const string skipFirstPass = "--skip-first-pass";
+const string skipSecondPass = "--skip-second-pass";
 
 var openFiles = true;
+var activePasses = Passes.All;
 
 // Validate arguments.
 List<string> files = [];
@@ -14,7 +17,19 @@ foreach (string arg in args)
 		openFiles = false;
 		continue;
 	}
+
+	if (arg.Equals(skipFirstPass, StringComparison.OrdinalIgnoreCase))
+	{
+		activePasses &= ~Passes.First;
+		continue;
+	}
 	
+	if (arg.Equals(skipSecondPass, StringComparison.OrdinalIgnoreCase))
+	{
+		activePasses &= ~Passes.Second;
+		continue;
+	}
+
 	string filePath = arg.Trim('\"');
 
 	if (!File.Exists(filePath))
@@ -36,6 +51,7 @@ foreach (string arg in args)
 	files.Add(filePath);
 }
 
+// Validate input files.
 if (files.Count == 0)
 {
 	Console.WriteLine("No files were provided. Provide a path to a .log file to run (drag a file onto the executable).");
@@ -44,142 +60,27 @@ if (files.Count == 0)
 	return -1;
 }
 
+// Validate input passes.
+var passes = new List<IReducerPass>(2);
+if ((activePasses & Passes.First) != 0)
+	passes.Add(new FirstPass());
+if ((activePasses & Passes.Second) != 0)
+	passes.Add(new SecondPass());
+
+if (passes.Count == 0)
+{
+	Console.WriteLine("All passes are skipped, no logic will run.");
+	Console.WriteLine("Press any key to exit.");
+	Console.ReadKey();
+	return -1;
+}
+
+// Run reducer on files.
 foreach (string filePath in files)
 {
 	string outputPath = Path.Combine(Path.GetDirectoryName(filePath)!, $"{Path.GetFileNameWithoutExtension(filePath)}_minified.log");
 
-	using (var fileStream = File.Open(outputPath, FileMode.Create, FileAccess.Write))
-	using (var textWriter = new StreamWriter(fileStream))
-	{
-		ReadOnlySpan<char> text = File.ReadAllText(filePath).AsSpan();
-		ReadOnlySpan<char> lastSection = default;
-		var occurenceOfLast = 1;
-		var sectionCount = 0;
-
-		// Collect the section of text before the next double line (or more if special logic runs).
-		while (StringUtility.SplitOnNextDoubleNewLine(text, out ReadOnlySpan<char> section, out text))
-		{
-			// If we have two sections to compare.
-			if (!lastSection.IsEmpty)
-			{
-				if (lastSection.SequenceEqual(section))
-				{
-					// Match found with the current section.
-					occurenceOfLast++;
-					goto Next;
-				}
-
-				if (lastSection.Length > section.Length)
-				{
-					// Get the previous section that could equal the next and compare them.
-					ReadOnlySpan<char> query = lastSection[^section.Length..];
-					if (query.SequenceEqual(section))
-					{
-						// Write the section we're not comparing to the file.
-						SplitAndWriteToFile(lastSection[..^section.Length]);
-						// Match found with the remaining section.
-						section = query;
-						occurenceOfLast++;
-						goto Next;
-					}
-				}
-
-				if (occurenceOfLast > 1)
-				{
-					// No match found but the last section had repeats.
-					textWriter.Write("--- Repeated ");
-					textWriter.Write(occurenceOfLast);
-					textWriter.WriteLine(" times ---");
-					textWriter.WriteLine(lastSection);
-					textWriter.WriteLine("--- End repeat ---");
-				}
-				else
-				{
-					// No match found and there were no repeats.
-					SplitAndWriteToFile(lastSection);
-				}
-
-				textWriter.WriteLine();
-
-				occurenceOfLast = 1;
-			}
-
-			Next:
-			lastSection = section;
-			sectionCount++;
-		}
-
-		// Write the remaining section/repeats.
-		if (sectionCount > 0)
-		{
-			if (occurenceOfLast > 1)
-			{
-				textWriter.Write("--- Repeated ");
-				textWriter.Write(occurenceOfLast);
-				textWriter.WriteLine(" times ---");
-				textWriter.WriteLine(lastSection);
-				textWriter.WriteLine("--- End repeat ---");
-			}
-			else
-			{
-				SplitAndWriteToFile(lastSection);
-			}
-		}
-
-		textWriter.Flush();
-
-		void SplitAndWriteToFile(ReadOnlySpan<char> text)
-		{
-			// Iterate singular lines and compare for repeats.
-			ReadOnlySpan<char> lastLine = default;
-			var occurenceOfLast = 1;
-			var lineCount = 0;
-			foreach (ReadOnlySpan<char> line in text.EnumerateLines())
-			{
-				// If we have two lines to compare.
-				if (!lastLine.IsEmpty)
-				{
-					if (line.SequenceEqual(lastLine))
-					{
-						// Match found with the current line.
-						occurenceOfLast++;
-					}
-					else if (occurenceOfLast > 1)
-					{
-						// No match found but the last line was repeated.
-						textWriter.WriteLine(lastLine);
-						textWriter.Write('\t');
-						textWriter.Write("⤷ Repeated ");
-						textWriter.Write(occurenceOfLast);
-						textWriter.WriteLine(" times.");
-						occurenceOfLast = 1;
-					}
-					else
-					{
-						// No match found, and no repetitions.
-						textWriter.WriteLine(lastLine);
-						occurenceOfLast = 1;
-					}
-				}
-
-				lastLine = line;
-				lineCount++;
-			}
-
-			// Write the remaining line/repeats.
-			if (lineCount > 0)
-			{
-				textWriter.WriteLine(lastLine);
-				if (occurenceOfLast > 1)
-				{
-					textWriter.Write('\t');
-					textWriter.Write("⤷ last line repeated ");
-					textWriter.Write(occurenceOfLast);
-					textWriter.WriteLine(" times.");
-				}
-			}
-		}
-	}
+	Reducer.Run(filePath, outputPath, passes);
 
 	Console.WriteLine("Successfully minified log.");
 	Console.WriteLine($"Output file path: {outputPath}");
